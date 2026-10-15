@@ -1,1 +1,638 @@
-<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><title>Board</title>
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ソーシングボード</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* Layout: 上に要約、下は左に一覧・右に詳細の2ペイン（狭い画面では縦積み）。色はマルーンを軸に、◎だけ真鍮色で目立たせる */
+:root {
+  --bg: #f4f2f2;
+  --panel: #ffffff;
+  --ink: #23191c;
+  --muted: #6e6164;
+  --line: #e2dbdc;
+  --maroon: #6b1e2c;
+  --maroon-soft: #f1e4e6;
+  --brass: #9a7426;
+  --brass-soft: #f6eedb;
+  --good: #2f6b4f;
+  --good-soft: #e3efe8;
+  --warn: #8a5a12;
+  --warn-soft: #f6ead6;
+  --stop: #6e6164;
+  --stop-soft: #ece8e8;
+  --focus: #b5485c;
+  --side: #5a1824; --side-ink: #f7eef0; --side-muted: #d9bcc2; --side-hi: rgba(255,255,255,.13);
+  --display: "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #171214; --panel: #211a1c; --ink: #efe7e8; --muted: #b3a5a8; --line: #3a2f32;
+    --maroon: #e0909e; --maroon-soft: #3a2228; --brass: #d8b46a; --brass-soft: #3a3020;
+    --good: #8fd0ae; --good-soft: #1f3328; --warn: #e2b46a; --warn-soft: #3a2e1a;
+    --stop: #b3a5a8; --stop-soft: #2c2427; --focus: #f0a0ae; --side: #2a1218; --side-ink: #efe3e6; --side-muted: #b49aa0; --side-hi: rgba(255,255,255,.08); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #171214; --panel: #211a1c; --ink: #efe7e8; --muted: #b3a5a8; --line: #3a2f32;
+  --maroon: #e0909e; --maroon-soft: #3a2228; --brass: #d8b46a; --brass-soft: #3a3020;
+  --good: #8fd0ae; --good-soft: #1f3328; --warn: #e2b46a; --warn-soft: #3a2e1a;
+  --stop: #b3a5a8; --stop-soft: #2c2427; --focus: #f0a0ae; --side: #2a1218; --side-ink: #efe3e6; --side-muted: #b49aa0; --side-hi: rgba(255,255,255,.08); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 14px; line-height: 1.6; margin: 0; }
+.app { display: grid; grid-template-columns: 216px minmax(0, 1fr); min-height: 100vh; }
+.sidenav { background: var(--side); color: var(--side-ink); position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 18px; padding-block: 18px; overflow-y: auto; }
+.sidenav .logo { padding-inline: 18px; display: grid; gap: 2px; }
+.sidenav .logo small { font-size: 11px; color: var(--side-muted); letter-spacing: .08em; }
+.sidenav .logo b { font-family: var(--display); font-size: 19px; font-weight: 700; letter-spacing: .03em; white-space: nowrap; }
+.sidenav .foot { margin-top: auto; padding-inline: 18px; font-size: 11px; color: var(--side-muted); line-height: 1.5; }
+.wrap { max-width: 1280px; width: 100%; margin: 0 auto; padding-inline: 20px; padding-block: 18px 40px; display: grid; gap: 14px; align-content: start; }
+a { color: var(--maroon); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+header.top .brand h1 { font-size: 22px; }
+header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; border-bottom: 2px solid var(--maroon); padding-bottom: 12px; }
+.brand h1 { font-family: var(--display); font-size: 26px; font-weight: 700; margin: 0; letter-spacing: .02em; text-wrap: balance; }
+.brand p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+.preview { font-size: 11.5px; color: var(--warn); background: var(--warn-soft); border-radius: 4px; padding: 3px 8px; letter-spacing: .03em; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 8px; }
+.stat[aria-pressed="true"] { border-color: var(--maroon); box-shadow: inset 0 -3px 0 var(--maroon); }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+.stat b { display: block; font-family: var(--mono); font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: 12px; letter-spacing: .04em; }
+.stat.hl b { color: var(--brass); }
+
+nav.tabs { display: grid; gap: 2px; }
+nav.tabs button { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 10px; align-items: center; background: none; border: 0; border-left: 3px solid transparent; padding: 11px 16px 11px 15px; font: inherit; font-weight: 500; color: var(--side-ink); cursor: pointer; text-align: left; }
+nav.tabs button:hover { background: var(--side-hi); }
+nav.tabs button[aria-selected="true"] { background: var(--side-hi); border-left-color: var(--brass); font-weight: 700; }
+nav.tabs svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+nav.tabs .n { font-family: var(--mono); font-size: 11.5px; color: var(--side-muted); }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.filters input[type=search] { flex: 1 1 200px; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
+.filters select { padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; max-width: 100%; }
+.msel { position: relative; }
+.msel-btn { padding: 7px 28px 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; cursor: pointer; white-space: nowrap; position: relative; min-width: 9em; text-align: left; }
+.msel-btn::after { content: ""; position: absolute; right: 10px; top: 50%; width: 6px; height: 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: translateY(-70%) rotate(45deg); }
+.msel-btn.on { border-color: var(--maroon); color: var(--maroon); font-weight: 700; }
+.msel-pop { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; min-width: 100%; width: max-content; max-width: min(340px, 90vw); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.14); padding: 6px; display: grid; gap: 2px; }
+.msel-pop label { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.msel-pop label:hover { background: var(--maroon-soft); }
+.msel-pop input { accent-color: var(--maroon); width: 15px; height: 15px; margin: 0; }
+.msel-pop .msel-clear { justify-self: start; padding: 6px 8px; font-size: 12.5px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 12.5px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--maroon); border-color: var(--maroon); color: var(--panel); }
+
+.board { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 16px; align-items: start; }
+.list { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.list .meta { display: flex; justify-content: space-between; padding: 8px 12px; color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--line); }
+.rows { max-height: 68vh; overflow-y: auto; }
+.row { display: grid; grid-template-columns: 22px 26px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; text-align: left; width: 100%; background: none; border-left: 0; border-right: 0; border-top: 0; font: inherit; color: inherit; }
+.row:hover { background: var(--maroon-soft); }
+.row[aria-current="true"] { background: var(--maroon-soft); box-shadow: inset 3px 0 0 var(--maroon); }
+.grade { font-family: var(--display); font-size: 18px; line-height: 1.2; text-align: center; color: var(--muted); }
+.grade.g1 { color: var(--brass); }
+.row .nm { font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
+.row .sub { color: var(--muted); font-size: 12.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.row .side { text-align: right; font-family: var(--mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; display: grid; gap: 4px; justify-items: end; }
+.pill { font-family: var(--body); font-size: 11px; border-radius: 4px; padding: 1px 6px; background: var(--stop-soft); color: var(--stop); }
+.pill.s-確認中, .pill.s-先方連絡中 { background: var(--warn-soft); color: var(--warn); }
+.pill.s-面談 { background: var(--good-soft); color: var(--good); }
+.empty { padding: 24px 12px; color: var(--muted); }
+
+.detail { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px 20px; display: grid; gap: 14px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
+.detail h2 { font-family: var(--display); font-size: 22px; margin: 0; text-wrap: balance; overflow-wrap: anywhere; }
+.detail .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { font-size: 12px; border-radius: 4px; padding: 2px 8px; background: var(--maroon-soft); color: var(--maroon); }
+.tag.g1 { background: var(--brass-soft); color: var(--brass); font-weight: 700; }
+.kv { display: grid; grid-template-columns: 7.5em minmax(0, 1fr); gap: 6px 12px; margin: 0; }
+.kv dt { color: var(--muted); font-size: 12px; letter-spacing: .04em; padding-top: 2px; }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+.kv .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.idea { background: var(--brass-soft); border-radius: 6px; padding: 10px 12px; }
+.idea b { display: block; font-size: 12px; color: var(--brass); letter-spacing: .06em; margin-bottom: 2px; }
+.ops { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+.ops label { font-size: 12px; color: var(--muted); }
+.ops select, .ops textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit; }
+.ops textarea { min-height: 70px; resize: vertical; }
+.ops .saved { font-size: 12px; color: var(--good); min-height: 1.2em; }
+
+.criteria { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px 20px; display: grid; gap: 18px; }
+.criteria h3 { font-family: var(--display); font-size: 17px; margin: 0 0 6px; }
+.criteria dl { display: grid; grid-template-columns: 9em minmax(0, 1fr); gap: 8px 14px; margin: 0; }
+.criteria dt { color: var(--muted); font-size: 12.5px; }
+.criteria dd { margin: 0; max-width: 72ch; }
+
+@media (max-width: 860px) {
+  .board { grid-template-columns: minmax(0, 1fr); }
+  .detail { position: static; }
+  .rows { max-height: 52vh; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+
+.runbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+.runbar .msg { color: var(--muted); font-size: 12.5px; flex: 1 1 260px; min-width: 0; }
+.runbar .msg.err { color: var(--maroon); }
+.runbar input { padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit; width: 11em; }
+.btn { background: var(--maroon); color: var(--panel); border: 0; border-radius: 6px; padding: 8px 14px; font: inherit; font-weight: 700; cursor: pointer; }
+.btn[disabled] { opacity: .45; cursor: not-allowed; }
+.btn.ghost { background: none; color: var(--maroon); border: 1px solid var(--line); font-weight: 500; }
+.loading { padding: 24px 12px; color: var(--muted); }
+.tm { font-family: var(--body); font-size: 11px; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+.tm-now { background: var(--brass-soft); color: var(--brass); font-weight: 700; }
+.tm-next { background: var(--good-soft); color: var(--good); font-weight: 700; }
+.tm-collab { background: var(--maroon-soft); color: var(--maroon); }
+.tm-wait { background: var(--stop-soft); color: var(--stop); }
+.selbox { display: grid; place-items: center; padding-top: 2px; cursor: pointer; }
+.selbox input, .selall input { width: 16px; height: 16px; accent-color: var(--maroon); cursor: pointer; margin: 0; }
+.selall { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; }
+.row.picked { background: color-mix(in srgb, var(--brass-soft) 70%, var(--panel)); }
+.metar { display: inline-flex; gap: 12px; align-items: center; }
+.link { background: none; border: 0; padding: 0; font: inherit; color: var(--maroon); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.selbar { position: sticky; bottom: 12px; z-index: 5; display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; background: var(--ink); color: var(--panel); border-radius: 8px; padding: 10px 14px; box-shadow: 0 6px 20px rgba(0,0,0,.18); }
+.selbar b { font-family: var(--mono); font-weight: 500; }
+.selbar .btn.ghost { color: var(--panel); border-color: rgba(255,255,255,.35); }
+.selbar .link { color: var(--panel); }
+.selbar .msg { font-size: 12px; opacity: .8; }
+.dhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.btn.sm { padding: 5px 10px; font-size: 12.5px; white-space: nowrap; }
+.row .side .dt { font-size: 11.5px; }
+.fresh { font-family: var(--body); font-size: 11px; border-radius: 4px; padding: 1px 6px; background: var(--maroon-soft); color: var(--maroon); }
+.news { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; display: grid; gap: 6px; }
+.news b { font-size: 12px; color: var(--muted); font-weight: 500; letter-spacing: .04em; }
+.news p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.hist { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12.5px; color: var(--muted); }
+.deep { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+/* ダッシュボード */
+.stat { display: grid; gap: 2px; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.stat:hover { border-color: var(--maroon); }
+.stat small { font-family: var(--mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stat small em { font-style: normal; color: var(--maroon); }
+.split { display: flex; height: 4px; border-radius: 2px; overflow: hidden; background: var(--stop-soft); margin-top: 4px; }
+.split i { display: block; }
+.dash { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; }
+.card { grid-column: span 6; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.card.w8 { grid-column: span 8; } .card.tall { grid-row: span 2; }
+.dash > .stats, .dash > .runbar { grid-column: 1 / -1; }
+.feed .side2 { display: grid; gap: 3px; justify-items: end; font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; } .card.w4 { grid-column: span 4; } .card.w12 { grid-column: span 12; }
+.card header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.card h3 { font-family: var(--display); font-size: 16px; margin: 0; }
+.card .hint { color: var(--muted); font-size: 12px; }
+.tlwrap { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 14px; align-items: stretch; }
+.nowbox { background: var(--good-soft); border: 0; border-radius: 6px; padding: 12px; display: grid; align-content: center; gap: 4px; text-align: left; font: inherit; color: var(--good); cursor: pointer; }
+.nowbox:hover { filter: brightness(0.97); }
+.nowbox span { font-size: 12px; } .nowbox b { font-family: var(--mono); font-size: 30px; font-weight: 500; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.nowbox small { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+.tl { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; align-items: end; }
+.tl button { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; display: grid; gap: 4px; align-items: end; justify-items: center; min-width: 0; }
+.tl .v { font-family: var(--mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tl .col { width: 100%; height: 130px; display: flex; flex-direction: column; justify-content: flex-end; border-bottom: 1px solid var(--line); }
+.tl .col i { display: block; width: 100%; border-radius: 3px 3px 0 0; }
+.tl .lb { font-family: var(--mono); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.tl button:hover .col i { filter: brightness(0.92); }
+.tl button.now .lb { color: var(--ink); font-weight: 500; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.mx { width: 100%; border-collapse: separate; border-spacing: 4px; table-layout: fixed; }
+.mx th { font-size: 11.5px; color: var(--muted); font-weight: 500; text-align: center; }
+.mx th.r { text-align: left; width: 4.5em; font-family: var(--display); font-size: 15px; color: var(--ink); }
+.mx td button { width: 100%; border: 0; border-radius: 6px; padding: 14px 4px; font: inherit; font-family: var(--mono); font-size: 18px; cursor: pointer; color: var(--ink); font-variant-numeric: tabular-nums; }
+.hb { display: grid; grid-template-columns: 8.5em minmax(0, 1fr) 3em; gap: 6px 10px; align-items: center; }
+.hb button { display: contents; font: inherit; color: inherit; cursor: pointer; }
+.hb .nm { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hb .tr { display: flex; height: 14px; background: var(--stop-soft); border-radius: 3px; overflow: hidden; }
+.hb .tr i { display: block; height: 100%; }
+.hb .n { font-family: var(--mono); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+.feed { display: grid; }
+.feed button { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 8px 0; border: 0; border-bottom: 1px solid var(--line); background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.feed button:last-child { border-bottom: 0; }
+.feed button:hover .t { color: var(--maroon); }
+.feed .t { font-weight: 700; }
+.feed .d { color: var(--muted); font-size: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed .g { font-family: var(--display); font-size: 16px; width: 1.2em; text-align: center; color: var(--muted); }
+.feed .g.g1 { color: var(--brass); }
+.mo { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 2px; align-items: end; height: 110px; border-bottom: 1px solid var(--line); }
+.mo div { display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+.mo i { display: block; }
+.mo-lb { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 2px; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+.mo-lb span { white-space: nowrap; overflow: visible; }
+.pickchip { display: inline-flex; gap: 6px; align-items: center; background: var(--maroon); color: var(--panel); border-radius: 999px; padding: 3px 4px 3px 12px; font-size: 12.5px; }
+.pickchip button { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; padding: 0 6px; }
+.lastrun { display: grid; grid-template-columns: 6em minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 12.5px; }
+.lastrun dt { color: var(--muted); } .lastrun dd { margin: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+@media (max-width: 960px) { .card, .card.w8, .card.w4 { grid-column: span 12; } }
+@media (max-width: 560px) { .tlwrap { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .sidenav { position: static; height: auto; flex-direction: row; align-items: center; gap: 8px; padding: 8px 12px; overflow-x: auto; }
+  .sidenav .logo b { font-size: 15px; } .sidenav .logo small, .sidenav .foot { display: none; }
+  .sidenav .logo { display: none; }
+  nav.tabs { display: flex; gap: 0; } nav.tabs button { display: flex; flex: 0 0 auto; gap: 6px; border-left: 0; border-bottom: 3px solid transparent; padding: 8px 10px; white-space: nowrap; }
+  nav.tabs .n { font-size: 10.5px; }
+  nav.tabs button[aria-selected="true"] { border-bottom-color: var(--brass); }
+  .wrap { padding-inline: 16px; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tl .lb { font-size: 9.5px; }
+}
+.gate { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: grid; place-items: center; padding-inline: 16px; }
+.gate form { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 28px 24px; display: grid; gap: 12px; width: min(380px, 100%); }
+.gate h2 { font-family: var(--display); font-size: 20px; margin: 0; }
+.gate p { margin: 0; color: var(--muted); font-size: 13px; }
+.gate input { padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit; }
+.gate .msg { color: var(--maroon); min-height: 1.2em; }
+</style></head><body>
+<div class="gate" id="gate" hidden><form id="gateform" autocomplete="off">
+  <h2 id="gate-title">ソーシングボード</h2>
+  <p>閲覧用の合言葉を入れてください（このブラウザに保存されます）</p>
+  <input id="viewkey" type="password" aria-label="閲覧用の合言葉" placeholder="閲覧用の合言葉">
+  <button class="btn" type="submit">開く</button><p class="msg" id="gatemsg"></p></form></div>
+
+<div class="app">
+<aside class="sidenav">
+  <div class="logo"><small id="logo-org" hidden></small><b>ソーシングボード</b></div>
+  <nav class="tabs" role="tablist" aria-label="画面の切り替え">
+    <button role="tab" aria-selected="true" data-tab="dash"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg><span>ダッシュボード</span><span></span></button>
+    <button role="tab" aria-selected="false" data-tab="cand"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/></svg><span id="tab-cand-label">候補</span><span class="n" id="n-cand"></span></button>
+    <button role="tab" aria-selected="false" data-tab="all"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>全件（広め）</span><span class="n" id="n-all"></span></button>
+    <button role="tab" aria-selected="false" data-tab="sel"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 12l3 3 5-6"/></svg><span>選んだ会社</span><span class="n" id="n-sel"></span></button>
+  </nav>
+  <p class="foot" id="foot-note">資金調達の発表を広めに集め、協業・出資の基準で絞っています。データはスプレッドシートに保存されます。</p>
+</aside>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1 id="page-title">ダッシュボード</h1>
+      <p id="page-sub">誰に・いつ声をかけるか</p>
+    </div>
+  </header>
+
+  <section id="view-dash" class="dash" aria-label="ダッシュボード">
+    <div class="stats" aria-label="件数のまとめ">
+      <button class="stat hl" data-go="nowg1"><span>いま声をかける ◎</span><b id="s-nowg1">–</b><small>既存事業に直結</small></button>
+      <button class="stat" data-go="nowg2"><span>いま声をかける ○</span><b id="s-nowg2">–</b><small>中計の方向に合う</small></button>
+      <button class="stat" data-go="work"><span>対応中</span><b id="s-work">–</b><small id="s-work-sub"></small></button>
+      <button class="stat" data-go="fresh"><span>今回の新着・更新</span><b id="s-fresh">–</b><small id="s-fresh-sub"></small></button>
+    </div>
+    <article class="card w8 tall"><header><h3>いま声をかける会社</h3><span class="hint">ラウンド継続中・次の調達が近い ／ ◎が先</span></header>
+      <div class="feed" id="d-now"></div></article>
+    <article class="card w4"><header><h3>今回の新着・更新</h3><span class="hint" id="d-feed-h"></span></header><div class="feed" id="d-feed"></div></article>
+    <article class="card w4"><header><h3>3ヶ月以内に時期が来る</h3><span class="hint">次の調達が近づく ◎○</span></header><div class="feed" id="d-soon"></div></article>
+    <section class="runbar" aria-label="取り込み">
+      <button class="btn" id="fire" disabled>最新の発表を取り込む</button>
+      <span class="msg" id="runmsg">読み込み中…</span>
+      <input id="key" type="password" autocomplete="off" placeholder="合言葉" aria-label="合言葉">
+      <button class="btn ghost" id="reload">再読み込み</button>
+    </section>
+  </section>
+
+  <section id="view-board" hidden>
+    <div class="filters" style="margin-bottom:12px">
+      <input type="search" id="q" placeholder="会社名・事業で検索" aria-label="検索">
+      <div class="msel" id="f-grade"></div>
+      <div class="msel" id="f-time"></div>
+      <div class="msel" id="f-area"></div>
+      <div class="msel" id="f-status"></div>
+      <span class="pickchip" id="pick" hidden></span>
+    </div>
+    <div class="board">
+      <div class="list">
+        <div class="meta"><label class="selall" title="表示中の会社をまとめて選ぶ"><input type="checkbox" id="selall"><span id="count"></span></label><span class="metar"><span>時期→判定→調達日の順</span><button class="link" id="xls-list">この一覧をExcelに</button></span></div>
+        <div class="rows" id="rows" role="list"><div class="loading">スプレッドシートから読み込んでいます…</div></div>
+      </div>
+      <article class="detail" id="detail" aria-live="polite"></article>
+    </div>
+    <div class="selbar" id="selbar" hidden><span><b id="selbar-n">0</b>社を選択中</span>
+      <button class="btn ghost sm" id="sel-open">選んだ会社を見る</button><button class="btn sm" id="sel-xls">Excelに出力</button>
+      <button class="link" id="sel-clear">選択を外す</button><span class="msg" id="sel-msg"></span></div>
+  </section>
+</div>
+</div>
+
+<script>
+var DATA = { all: [] }, RUN = null;
+const STATUSES = ["未着手", "確認中", "先方連絡中", "面談", "見送り"];
+const AREAS = [
+  ["交通", /交通|駅|鉄道/], ["ビル・まちなか", /ビル|まちなか|スマートシティ/], ["医療・健診", /医療|健診|ヘルスケア/],
+  ["会員・EC・集客", /Web|会員|EC|デジタルマーケ|流通|インバウンド|エンタメ/], ["コールセンター", /コールセンター|顧客管理/],
+  ["インフラ・セキュリティ", /ITインフラ|セキュリティ|IoT/], ["業務DX・生成AI", /生産性|企業DX|生成AI|電力|先端/]
+];
+const S = { tab: "dash", pick: null, q: "", grade: new Set(), time: new Set(), area: new Set(), status: new Set(), sel: null };
+// 声かけの時期（前回の調達日とラウンドから計算）。表示は短く、意味は title と凡例で補う
+const TIMINGS = [["ラウンド継続中", "tm-now", "1stクローズ・追加調達などの発表から4ヶ月以内。検討期間（1〜2ヶ月）を見込んでもまだ間に合う"],
+  ["次の調達が近い", "tm-next", "次のラウンドまでの標準的な期間の2ヶ月前から（シード・プレA 10〜22ヶ月／A 14〜26ヶ月／B・C 12〜25ヶ月）。検討期間1〜2ヶ月を見込んだ"],
+  ["調達直後", "tm-collab", "調達から1年以内。出資より先に業務提携から入る"], ["時期未定", "tm-wait", "目安の期間を過ぎた、またはラウンドが分からない"]];
+// 次の調達の相場を、検討期間1〜2ヶ月ぶん早めた窓
+const WIN = { "プレシード": [10, 22], "シード": [10, 22], "プレシリーズA": [10, 22], "シリーズA": [14, 26], "シリーズB": [12, 25], "シリーズC": [12, 25] };
+const TODAY = new Date();
+function timingOf(r) {
+  if (r._tm) return r._tm;
+  const d = new Date(r.date); const m = isNaN(d) ? 999 : (TODAY - d) / (864e5 * 30.4);
+  const open = /1st|ファースト|エクステンション|追加調達|追加で|セカンドクローズ|2nd/i.test(r.title || "") && m < 4;
+  let t;
+  if (open) t = "ラウンド継続中";
+  else if (WIN[r.round] && m >= WIN[r.round][0] && m <= WIN[r.round][1]) t = "次の調達が近い";
+  else if (m < 12 && r.round !== "" && !/事業共創AWARD/.test(r.src || "")) t = "調達直後";
+  else if (m < 12) t = "調達直後";
+  else t = "時期未定";
+  r._tm = t; return t;
+}
+const TM_ORDER = { "ラウンド継続中": 0, "次の調達が近い": 1, "調達直後": 2, "時期未定": 3 };
+const tmPill = (r) => { const t = timingOf(r); const c = TIMINGS.find((x) => x[0] === t)[1]; return `<span class="tm ${c}">${t}</span>`; };
+// 最後の取り込み（新着の取り込み日・既存行の更新日のうち最も新しい日時）
+const latestAdded = () => DATA.all.reduce((m, r) => [r.added, r.updated].reduce((x, v) => (v && v > x ? v : x), m), "");
+const freshOf = (r, la) => (r.added === la ? "新着" : r.updated === la ? "更新" : "");
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const areasOf = (r) => AREAS.filter(([, re]) => re.test(r.area || "")).map(([n]) => n);
+const isCand = (r) => r.grade === "◎" || r.grade === "○";
+const key = () => $("key").value.trim();
+try { $("key").value = localStorage.getItem("itec-key") || ""; } catch (e) {}
+$("key").addEventListener("change", () => { try { localStorage.setItem("itec-key", key()); } catch (e) {} });
+
+// 画面に出す相手先の名前は、データと一緒に受け取って当てる（公開している画面のファイルには名前を置かない）
+let BRAND = { org: "", short: "", board: "ソーシングボード", idea: "組み方（仮説）", file: "ソーシングボード" };
+function applyBrand(b) {
+  if (b && b.org) { const s = b.short || b.org;
+    BRAND = { org: b.org, short: s, board: b.board || "ソーシングボード", idea: s + "との組み方（仮説）", file: b.file || b.org }; }
+  const full = BRAND.org ? BRAND.org + " " + BRAND.board : BRAND.board;
+  document.title = full;
+  $("gate-title").textContent = full;
+  const lo = $("logo-org"); lo.textContent = BRAND.org; lo.hidden = !BRAND.org;
+  $("foot-note").textContent = "資金調達の発表を広めに集め、" + (BRAND.org ? BRAND.org + "の" : "協業・出資の") + "基準で絞っています。データはスプレッドシートに保存されます。";
+  PAGES.cand = [BRAND.short + "候補", (BRAND.short ? BRAND.short + "の" : "") + "基準で◎・○を付けた会社"];
+  $("tab-cand-label").textContent = PAGES.cand[0];
+  if (S.tab === "cand") { $("page-title").textContent = PAGES.cand[0]; $("page-sub").textContent = PAGES.cand[1]; }
+}
+
+// データはGAS（スプレッドシート）から読む。閲覧には閲覧用の合言葉、操作には操作用の合言葉が要る
+const API = "https://script.google.com/macros/s/AKfycbwTuYM0RhIdCB6l9PLkE1cmzqUmgpit2ZjpnazFfUTaxyNLi6Ee1tdhIiwo4XMCSD8M/exec"; // scripts/publish_web.sh が owner.env の値に置き換える
+const viewKey = () => { try { return localStorage.getItem("itec-view") || ""; } catch (e) { return ""; } };
+async function apiGet(params) { const r = await fetch(API + "?" + new URLSearchParams(params)); return r.json(); }
+async function call(ui, extra) {
+  // text/plain で送る（事前確認なしで送れる形）。結果は {ok, error}
+  const r = await fetch(API, { method: "POST", body: JSON.stringify({ ui, key: key(), ...(extra || {}) }) });
+  const res = await r.json();
+  if (!res.ok) throw new Error(res.error || "うまくいきませんでした");
+  return res;
+}
+function load() {
+  const v = viewKey();
+  if (!v) { $("gate").hidden = false; $("viewkey").focus(); return; }
+  $("runmsg").textContent = "読み込み中…";
+  apiGet({ action: "board", view: v }).then((res) => {
+    if (!res.ok) {
+      try { localStorage.removeItem("itec-view"); } catch (e) {}
+      $("gate").hidden = false; $("gatemsg").textContent = res.error === "view" ? "合言葉が違います" : res.error; return;
+    }
+    $("gate").hidden = true; applyBrand(res.brand);
+    DATA.all = res.rows.sort((a, b) => b.date.localeCompare(a.date)); RUN = res.run; summary(); renderRun(); render(); dash();
+  }).catch((e) => { $("runmsg").textContent = "読み込めませんでした：" + e.message; $("runmsg").className = "msg err"; });
+}
+$("gateform").addEventListener("submit", (e) => {
+  e.preventDefault(); const v = $("viewkey").value.trim(); if (!v) return;
+  try { localStorage.setItem("itec-view", v); } catch (err) {}
+  $("gatemsg").textContent = "確認しています…（しばらく使っていないと10秒ほどかかります）"; load();
+});
+const WORK = ["確認中", "先方連絡中", "面談"];
+// いま声をかける会社（ラウンド継続中・次の調達が近い）
+const isNow = (r) => ["ラウンド継続中", "次の調達が近い"].includes(timingOf(r));
+function summary() {
+  const cand = DATA.all.filter(isCand), la = latestAdded();
+  const fresh = DATA.all.filter((r) => freshOf(r, la)), freshNew = fresh.filter((r) => freshOf(r, la) === "新着").length;
+  $("s-nowg1").textContent = cand.filter((r) => r.grade === "◎" && isNow(r)).length;
+  $("s-nowg2").textContent = cand.filter((r) => r.grade === "○" && isNow(r)).length;
+  const work = cand.filter((r) => WORK.includes(r.status));
+  $("s-work").textContent = work.length; $("s-work-sub").textContent = `うち面談 ${work.filter((r) => r.status === "面談").length}`;
+  $("s-fresh").textContent = fresh.length; $("s-fresh-sub").textContent = la ? `新着${freshNew}・更新${fresh.length - freshNew}` : "";
+  $("n-cand").textContent = cand.length; $("n-all").textContent = DATA.all.length;
+}
+function renderRun() {
+  const r = RUN, b = $("fire"), m = $("runmsg"); m.className = "msg";
+  const memo = r.lastLog && /^更新/.test(r.lastLog.memo || "") ? "・" + r.lastLog.memo.split("／")[0] : "";
+  const last = r.lastLog ? `前回：${r.lastLog.at} ${r.lastLog.kind}${r.lastLog.n !== "" ? `（新規${r.lastLog.n}社・◎${r.lastLog.g1}・○${r.lastLog.g2}${Number(r.lastLog.deferred) ? `・後回し${r.lastLog.deferred}` : ""}${memo}）` : ""}` : "";
+  if (!r.configured) { b.disabled = true; m.textContent = "取り込みの設定（ルーティンのURLとトークン）がまだです。" + last; return; }
+  if (r.running) { b.disabled = true; b.textContent = "取り込み中…"; m.textContent = "Claudeが新しい発表を読んで判定しています。数分〜十数分かかります。終わったら再読み込みしてください。"; return; }
+  b.textContent = "最新の発表を取り込む";
+  if (r.firesLeft <= 0) { b.disabled = true; m.textContent = `今日の取り込みは上限（1日${r.maxPerDay}回）に達しました。次は ${r.nextAt} 以降に押せます。` + last; return; }
+  b.disabled = false; m.textContent = `新しい会社の発表（最大40件）と、一覧にある会社の新しい発表・候補の定期確認（最大10社）を読みます。1日${r.maxPerDay}回まで。` + last;
+}
+$("fire").addEventListener("click", () => {
+  if (!key()) { $("runmsg").textContent = "合言葉を入れてから押してください"; $("runmsg").className = "msg err"; return; }
+  $("fire").disabled = true; $("runmsg").textContent = "起動しています…";
+  call("fireUpdate").then((res) => { RUN = res.run; renderRun(); })
+    .catch((e) => { $("runmsg").textContent = e.message; $("runmsg").className = "msg err"; $("fire").disabled = false; });
+});
+$("reload").addEventListener("click", load);
+
+$("q").addEventListener("input", (e) => { S.q = e.target.value.trim(); render(); });
+// 絞り込み：判定・時期・領域・状況（どれも複数選べる。同じ項目の中は「どれか」、項目どうしは「かつ」）
+const NOW_T = ["ラウンド継続中", "次の調達が近い"];
+const OPT = {
+  grade: { title: "判定", opts: (tab) => [["◎", "◎ 既存事業に直結", "◎"], ["○", "○ 中計の方向に合う", "○"], ...(tab === "cand" ? [] : [["none", "判定なし", "判定なし"]])] },
+  time: { title: "時期", opts: () => [["ラウンド継続中", "ラウンド継続中（発表から4ヶ月以内）", "ラウンド継続中"],
+    ["次の調達が近い", "次の調達が近い（前回から約1〜2年）", "次の調達が近い"], ["調達直後", "調達直後（1年以内・提携から）", "調達直後"], ["時期未定", "時期未定", "時期未定"]] },
+  area: { title: "領域", opts: () => AREAS.map(([n]) => [n, n, n]) },
+  status: { title: "状況", opts: () => [...STATUSES.map((x) => [x, x, x]), ["fresh", "今回の新着・更新だけ", "今回の新着・更新"]] },
+};
+const MSEL = [["f-grade", "grade"], ["f-time", "time"], ["f-area", "area"], ["f-status", "status"]];
+function mselLabel(k) {
+  const o = OPT[k], set = S[k], opts = o.opts(S.tab).filter(([v]) => set.has(v));
+  if (!opts.length) return `${o.title}：すべて`;
+  if (k === "time" && set.size === 2 && NOW_T.every((t) => set.has(t))) return `${o.title}：いま声をかける`;
+  if (k === "status" && set.size === 3 && WORK.every((t) => set.has(t))) return `${o.title}：対応中`;
+  const names = opts.map((x) => x[2]).join("、");
+  return `${o.title}：` + (names.length > 16 ? `${opts.length}件` : names);
+}
+function fillSelects() {
+  MSEL.forEach(([id, k]) => {
+    const opts = OPT[k].opts(S.tab); [...S[k]].forEach((v) => { if (!opts.some(([x]) => x === v)) S[k].delete(v); });
+    $(id).innerHTML = `<button type="button" class="msel-btn${S[k].size ? " on" : ""}" aria-haspopup="true" aria-expanded="false">${esc(mselLabel(k))}</button>
+      <div class="msel-pop" hidden>${opts.map(([v, l]) => `<label><input type="checkbox" value="${esc(v)}" ${S[k].has(v) ? "checked" : ""}>${esc(l)}</label>`).join("")}
+      <button type="button" class="link msel-clear">すべてに戻す</button></div>`;
+  });
+}
+function closePops(except) { document.querySelectorAll(".msel-pop").forEach((p) => { if (p !== except) { p.hidden = true; p.previousElementSibling.setAttribute("aria-expanded", "false"); } }); }
+MSEL.forEach(([id, k]) => {
+  $(id).addEventListener("click", (e) => {
+    const btn = e.target.closest(".msel-btn"), pop = $(id).querySelector(".msel-pop");
+    if (btn) { const open = pop.hidden; closePops(); pop.hidden = !open; btn.setAttribute("aria-expanded", open); return; }
+    if (e.target.closest(".msel-clear")) { S[k].clear(); fillSelects(); render(); markStats(); }
+  });
+  $(id).addEventListener("change", (e) => {
+    const c = e.target.closest("input[type=checkbox]"); if (!c) return;
+    c.checked ? S[k].add(c.value) : S[k].delete(c.value);
+    const btn = $(id).querySelector(".msel-btn"); btn.textContent = mselLabel(k); btn.classList.toggle("on", S[k].size > 0);
+    render(); markStats();
+  });
+});
+document.addEventListener("click", (e) => { if (!e.target.closest(".msel")) closePops(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePops(); });
+const resetFilters = () => { MSEL.forEach(([, k]) => S[k].clear()); };
+const sameSet = (set, arr) => set.size === arr.length && arr.every((x) => set.has(x));
+const PAGES = { dash: ["ダッシュボード", "誰に・いつ声をかけるか"],
+  cand: ["候補", "基準で◎・○を付けた会社"],
+  all: ["全件（広め）", "集めた資金調達の発表すべて（判定なしを含む）"],
+  sel: ["選んだ会社", "チェックを付けた会社。Excelに出力できます（選択はこのブラウザに保存）"] };
+function markStats() {
+  document.querySelectorAll(".stat[data-go]").forEach((b) => { const g = b.dataset.go;
+    const on = S.tab !== "dash" && !S.pick && !S.area.size && ((g === "nowg1" && sameSet(S.grade, ["◎"]) && sameSet(S.time, NOW_T) && !S.status.size)
+      || (g === "nowg2" && sameSet(S.grade, ["○"]) && sameSet(S.time, NOW_T) && !S.status.size)
+      || (g === "work" && sameSet(S.status, WORK) && !S.grade.size && !S.time.size) || (g === "fresh" && sameSet(S.status, ["fresh"]) && !S.grade.size && !S.time.size));
+    b.setAttribute("aria-pressed", on); });
+}
+function switchTab(tab, keepSel) {
+  S.tab = tab; document.querySelectorAll("nav.tabs button").forEach((x) => x.setAttribute("aria-selected", x.dataset.tab === tab));
+  $("view-dash").hidden = tab !== "dash"; $("view-board").hidden = tab === "dash";
+  if (!keepSel) S.sel = null;
+  $("page-title").textContent = PAGES[tab][0]; $("page-sub").textContent = PAGES[tab][1];
+  fillSelects();
+  if (tab === "dash") dash(); else render();
+  markStats(); updSel();
+}
+document.querySelector("nav.tabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (!b) return; S.pick = null; resetFilters(); switchTab(b.dataset.tab); });
+// ダッシュボードから一覧へ：選んだ会社だけに絞って候補（または全件）のタブを開く
+function pick(label, rows, tab) { S.pick = { label, urls: new Set(rows.map((r) => r.url)) }; resetFilters(); switchTab(tab || "cand"); $("view-board").scrollIntoView({ block: "start" }); }
+function openRow(r) { S.pick = null; resetFilters(); switchTab(isCand(r) ? "cand" : "all", true); S.sel = r.url; render(); $("detail").scrollIntoView({ block: "start" }); }
+// 件数カードを押すと、その条件の一覧を開く（全件と今回の新着・更新は全件タブ、それ以外は候補タブ）
+document.querySelector(".stats").addEventListener("click", (e) => { const b = e.target.closest("[data-go]"); if (!b) return;
+  const go = b.dataset.go; S.pick = null; resetFilters();
+  if (go === "nowg1" || go === "nowg2") { S.grade.add(go === "nowg1" ? "◎" : "○"); NOW_T.forEach((t) => S.time.add(t)); }
+  else if (go === "work") WORK.forEach((t) => S.status.add(t));
+  else S.status.add("fresh");
+  switchTab(go === "fresh" ? "all" : "cand");
+  $("view-board").scrollIntoView({ block: "start" }); });
+$("rows").addEventListener("click", (e) => { if (e.target.closest(".selbox")) return; const b = e.target.closest(".row"); if (b) { S.sel = b.dataset.url; const y = $("rows").scrollTop; render(); $("rows").scrollTop = y; } });
+$("rows").addEventListener("keydown", (e) => { const b = e.target.closest(".row"); if (b && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); S.sel = b.dataset.url; render(); } });
+$("rows").addEventListener("change", (e) => { const c = e.target.closest(".selc"); if (!c) return; const u = c.closest(".row").dataset.url;
+  c.checked ? SEL.add(u) : SEL.delete(u); c.closest(".row").classList.toggle("picked", c.checked); saveSel(); if (S.tab === "sel") { const y = $("rows").scrollTop; render(); $("rows").scrollTop = y; } });
+$("selall").addEventListener("change", (e) => { filtered().forEach((r) => (e.target.checked ? SEL.add(r.url) : SEL.delete(r.url))); saveSel(); const y = $("rows").scrollTop; render(); $("rows").scrollTop = y; });
+$("sel-open").addEventListener("click", () => { S.pick = null; resetFilters(); switchTab("sel"); });
+$("sel-clear").addEventListener("click", () => { SEL.clear(); saveSel(); render(); });
+$("sel-xls").addEventListener("click", () => exportXlsx(DATA.all.filter((r) => SEL.has(r.url)), "選んだ会社", $("sel-msg")));
+$("xls-list").addEventListener("click", () => exportXlsx(filtered(), S.tab === "sel" ? "選んだ会社" : S.tab === "cand" ? "候補" : "全件", $("sel-msg")));
+
+function filtered() {
+  let rows = S.tab === "cand" ? DATA.all.filter(isCand) : S.tab === "sel" ? DATA.all.filter((r) => SEL.has(r.url)) : DATA.all;
+  rows = [...rows].sort((a, b) => (TM_ORDER[timingOf(a)] - TM_ORDER[timingOf(b)]) || ((a.grade === "◎" ? 0 : a.grade === "○" ? 1 : 2) - (b.grade === "◎" ? 0 : b.grade === "○" ? 1 : 2)) || b.date.localeCompare(a.date));
+  if (S.pick) rows = rows.filter((r) => S.pick.urls.has(r.url));
+  if (S.q) { const q = S.q.toLowerCase(); rows = rows.filter((r) => [r.name, r.biz, r.area, r.idea, r.title].join(" ").toLowerCase().includes(q)); }
+  if (S.grade.size) rows = rows.filter((r) => S.grade.has(isCand(r) ? r.grade : "none"));
+  if (S.time.size) rows = rows.filter((r) => S.time.has(timingOf(r)));
+  if (S.area.size) rows = rows.filter((r) => areasOf(r).some((a) => S.area.has(a)));
+  if (S.status.has("fresh")) { const la = latestAdded(); rows = rows.filter((r) => !!freshOf(r, la)); }
+  const sts = [...S.status].filter((x) => x !== "fresh");
+  if (sts.length) rows = rows.filter((r) => sts.includes(r.status || "未着手"));
+  return rows;
+}
+function render() {
+  const rows = filtered(), la = latestAdded();
+  $("pick").hidden = !S.pick;
+  if (S.pick) { $("pick").innerHTML = `${esc(S.pick.label)}<button aria-label="絞り込みを外す">×</button>`; $("pick").querySelector("button").onclick = () => { S.pick = null; render(); }; }
+  $("count").textContent = `${rows.length}社`;
+  if (!rows.find((r) => r.url === S.sel)) S.sel = rows[0]?.url ?? null;
+  $("selall").checked = rows.length > 0 && rows.every((r) => SEL.has(r.url));
+  $("rows").innerHTML = rows.length ? rows.map((r) => `<div class="row${SEL.has(r.url) ? " picked" : ""}" role="listitem" tabindex="0" data-url="${esc(r.url)}" aria-current="${r.url === S.sel}">
+      <label class="selbox" title="選ぶ"><input type="checkbox" class="selc" aria-label="${esc(r.name)}を選ぶ" ${SEL.has(r.url) ? "checked" : ""}></label>
+      <span class="grade ${r.grade === "◎" ? "g1" : ""}">${esc(isCand(r) ? r.grade : "・")}</span>
+      <span style="min-width:0"><span class="nm">${esc(r.name)}</span><span class="sub">${esc(r.biz)}</span></span>
+      <span class="side"><span class="dt">調達 ${esc(String(r.date).slice(0, 7).replace("-", "."))}</span>${tmPill(r)}${freshOf(r, la) ? `<span class="fresh">${freshOf(r, la)}</span>` : ""}${r.status && r.status !== "未着手" ? `<span class="pill s-${esc(r.status)}">${esc(r.status)}</span>` : ""}</span></div>`).join("")
+    : `<div class="empty">${S.tab === "sel" ? "まだ会社を選んでいません。一覧の左のチェックで選べます。" : "条件に合う会社はありません。検索語や絞り込みを外してください。"}</div>`;
+  updSel();
+  detail(rows.find((r) => r.url === S.sel));
+}
+function detail(r) {
+  const el = $("detail");
+  if (!r) { el.innerHTML = `<p class="empty">左の一覧から会社を選ぶと、事業と根拠がここに表示されます。</p>`; return; }
+  const tags = [tmPill(r), isCand(r) ? `<span class="tag ${r.grade === "◎" ? "g1" : ""}">${r.grade === "◎" ? "◎ 既存事業に直結" : "○ 中計の方向に合う"}</span>` : (r.grade ? `<span class="tag">${esc(r.grade)}</span>` : ""),
+    ...areasOf(r).map((a) => `<span class="tag">${esc(a)}</span>`)].join("");
+  el.innerHTML = `<div class="dhead"><h2>${esc(r.name)}</h2><button class="btn ghost sm" id="seltoggle">${SEL.has(r.url) ? "選択を外す" : "この会社を選ぶ"}</button></div>${tags ? `<div class="tags">${tags}</div>` : ""}
+    ${r.idea ? `<div class="idea"><b>${esc(BRAND.idea)}</b>${esc(r.idea)}</div>` : ""}
+    ${r.news ? `<div class="news"><b>最近の動き${r.checked ? `（確認 ${esc(r.checked)}）` : ""}</b><p>${esc(String(r.news).replace(/^\d{4}-\d{2}-\d{2} /, ""))}</p></div>` : ""}
+    <dl class="kv"><dt>事業概要</dt><dd>${esc(r.biz)}</dd>${r.area ? `<dt>該当領域</dt><dd>${esc(r.area)}</dd>` : ""}${r.loc ? `<dt>所在地</dt><dd>${esc(r.loc)}</dd>` : ""}
+      <dt>調達の発表日</dt><dd class="num">${esc(r.date)}</dd><dt>ラウンド</dt><dd>${esc(r.round || "記載なし")}</dd>
+      <dt>調達額</dt><dd class="num">${r.amount ? esc(r.amount) + "億円" : "記載なし"}</dd>
+      <dt>発表</dt><dd><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title || r.url)}</a></dd>${r.history ? `<dt>過去の発表</dt><dd><p class="hist">${esc(r.history)}</p></dd>` : ""}</dl>
+    <div class="deep"><button class="btn ghost" id="deep">この会社を調べ直す</button><span class="saved" id="deepmsg"></span></div>
+    <div class="ops"><label for="st">ステータス</label>
+      <select id="st">${STATUSES.map((s) => `<option ${s === (r.status || "未着手") ? "selected" : ""}>${s}</option>`).join("")}</select>
+      <label for="memo">メモ（見送りの理由や先方の反応。次の判定に反映されます）</label>
+      <textarea id="memo" placeholder="例：交通事業本部の課題と合う。11月に面談希望">${esc(r.memo || "")}</textarea>
+      <div style="display:flex;gap:8px;align-items:center"><button class="btn" id="save">保存</button><span class="saved" id="saved"></span></div></div>`;
+  $("seltoggle").addEventListener("click", () => { SEL.has(r.url) ? SEL.delete(r.url) : SEL.add(r.url); saveSel(); const y = $("rows").scrollTop; render(); $("rows").scrollTop = y; });
+  const pending = RUN && (RUN.deepPending || []).includes(r.url);
+  $("deep").disabled = !RUN || !RUN.configured || pending || RUN.deepLeft <= 0;
+  $("deepmsg").textContent = pending ? "調べ直し中です。数分後に再読み込みしてください" : RUN ? `過去2年の発表と記事を読み直し、最近の動き・判定を更新します（今日あと${RUN.deepLeft}社）` : "";
+  $("deep").addEventListener("click", () => {
+    if (!key()) { $("deepmsg").textContent = "合言葉を入れてください"; return; }
+    $("deep").disabled = true; $("deepmsg").textContent = "起動しています…";
+    call("fireDeep", { url: r.url }).then((res) => { RUN = res.run; $("deepmsg").textContent = "調べ直しを始めました。数分後に再読み込みしてください"; })
+      .catch((e) => { $("deepmsg").textContent = e.message; $("deep").disabled = false; });
+  });
+  $("save").addEventListener("click", () => {
+    if (!key()) { $("saved").textContent = "合言葉を入れてください"; return; }
+    const st = $("st").value, memo = $("memo").value; $("saved").textContent = "保存しています…";
+    call("setStatus", { url: r.url, status: st, memo }).then(() => { r.status = st; r.memo = memo; $("saved").textContent = "保存しました"; const y = $("rows").scrollTop; render(); $("rows").scrollTop = y; })
+      .catch((e) => { $("saved").textContent = e.message; });
+  });
+}
+// ---- 選択（このブラウザに保存）とExcel出力 ----
+let SEL = new Set();
+try { SEL = new Set(JSON.parse(localStorage.getItem("itec-sel") || "[]")); } catch (e) {}
+function saveSel() { try { localStorage.setItem("itec-sel", JSON.stringify([...SEL])); } catch (e) {} updSel(); }
+function updSel() {
+  const n = DATA.all.length ? DATA.all.filter((r) => SEL.has(r.url)).length : SEL.size;
+  $("n-sel").textContent = n || ""; $("selbar-n").textContent = n; $("selbar").hidden = !n || S.tab === "dash";
+  $("sel-open").hidden = S.tab === "sel";
+}
+function exportXlsx(rows, label, msgEl) {
+  if (!rows.length) { msgEl.textContent = "出力する会社がありません"; $("selbar").hidden = false; return; }
+  if (typeof XLSX === "undefined") { msgEl.textContent = "Excel出力の部品を読み込めませんでした。再読み込みしてください"; return; }
+  const head = ["判定", "会社名", "事業概要", "所在地", "声をかける時期", "ラウンド", "調達額（億円）", "調達の発表日", "該当領域", "組み方の仮説", "ステータス", "メモ", "最近の動き", "発表タイトル", "発表URL", "情報源"];
+  const aoa = [head].concat(rows.map((r) => [r.grade, r.name, r.biz, r.loc, timingOf(r), r.round, r.amount === "" || isNaN(Number(r.amount)) ? r.amount : Number(r.amount),
+    r.date, r.area, r.idea, r.status || "未着手", r.memo, r.news, r.title, r.url, r.src]));
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = [6, 24, 44, 16, 14, 12, 10, 12, 26, 44, 10, 24, 44, 44, 40, 18].map((w) => ({ wch: w }));
+  ws["!autofilter"] = { ref: `A1:P${aoa.length}` };
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, label.slice(0, 30));
+  const d = new Date(), ds = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  XLSX.writeFile(wb, `${BRAND.file}_${label}_${ds}.xlsx`);
+  msgEl.textContent = `${rows.length}社をExcelに出力しました`;
+}
+
+// ---- ダッシュボード（誰に・いつ声をかけるか）----
+const feedRow = (r, i, right) => `<button data-i="${i}"><span class="g ${r.grade === "◎" ? "g1" : ""}">${isCand(r) ? r.grade : "・"}</span><span style="min-width:0"><span class="t">${esc(r.name)}</span><span class="d">${esc(r.biz || r.title)}</span></span>${right}</button>`;
+function feedInto(id, rows, n, right, moreLabel) {
+  $(id).innerHTML = rows.length ? rows.slice(0, n).map((r, i) => feedRow(r, i, right(r))).join("")
+    + (rows.length > n ? `<button data-more="1"><span></span><span class="d">ほか${rows.length - n}社を一覧で見る →</span><span></span></button>` : "")
+    : `<p class="empty" style="padding:8px 0">該当する会社はありません</p>`;
+  $(id).onclick = (e) => { const b = e.target.closest("button"); if (!b) return; if (b.dataset.more) return pick(moreLabel, rows); openRow(rows[+b.dataset.i]); };
+}
+function dash() {
+  if (!DATA.all.length) return;
+  const cand = DATA.all.filter(isCand), la = latestAdded();
+  const now = cand.filter(isNow).sort((a, b) => ((a.grade === "◎" ? 0 : 1) - (b.grade === "◎" ? 0 : 1)) || (TM_ORDER[timingOf(a)] - TM_ORDER[timingOf(b)]) || b.date.localeCompare(a.date));
+  feedInto("d-now", now, 12, (r) => `<span class="side2">${tmPill(r)}<span>調達 ${esc(String(r.date).slice(0, 7).replace("-", "."))}</span></span>`, "いま声をかける会社");
+  const fresh = DATA.all.filter((r) => freshOf(r, la)).sort((a, b) => (isCand(b) - isCand(a)) || ((a.grade === "◎" ? 0 : 1) - (b.grade === "◎" ? 0 : 1)));
+  $("d-feed-h").textContent = la ? `${la.slice(5).replace("-", "/")} 取り込み` : "";
+  feedInto("d-feed", fresh, 6, (r) => `<span class="fresh">${freshOf(r, la)}</span>`, "今回の新着・更新");
+  // 3ヶ月以内に「次の調達が近い」に入る会社
+  const lim = new Date(); lim.setMonth(lim.getMonth() + 3);
+  const soon = cand.filter((r) => !isNow(r) && WIN[r.round]).map((r) => { const d = new Date(r.date); d.setMonth(d.getMonth() + WIN[r.round][0]); return [r, d]; })
+    .filter(([, d]) => d > new Date() && d <= lim).sort((a, b) => a[1] - b[1]);
+  feedInto("d-soon", soon.map((x) => x[0]), 6, (r) => { const d = soon.find((x) => x[0] === r)[1]; return `<span class="side2"><span>${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}〜</span></span>`; }, "3ヶ月以内に時期が来る会社");
+}
+switchTab("dash");
+load();
+</script>
+
+</body></html>
